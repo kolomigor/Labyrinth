@@ -44,6 +44,18 @@ class Labyrint:
         self.floor = pygame.transform.scale(self.floor, (self.tile_size_x, self.tile_size_y))
         self.wall = pygame.transform.scale(self.wall, (self.tile_size_x, self.tile_size_y))
 
+    def load_map(self, filename,free_tiles, finish_tile):
+        self.map = []
+        with open(f"{MAPS_DIR}/{filename}") as input_file:
+            for line in input_file:
+                self.map.append(list(map(int, line.split())))
+        self.hight = len(self.map)
+        self.width = len(self.map[0])
+        self.tile_size_x = WINDOW_WIDTH // self.width
+        self.tile_size_y = WINDOW_HEIGHT // self.hight
+        self.free_tiles = free_tiles
+        self.finish_tile = finish_tile
+
     def render(self, screen):
         colors = {0: self.floor, 1: self.wall, 2: self.floor}
         for y in range(self.hight):
@@ -62,20 +74,21 @@ class Labyrint:
     def finde_path_step(self, start, target):
         INF = 1000
         x, y = start
-        distance = [[INF] * self.width for _ in range(self.hight)]
-        distance[x][y] = 0
+        distanse = [[INF] * self.width for _ in range(self.hight)]
+        distanse[y][x] = 0
         prev = [[None] * self.width for _ in range(self.hight)]
-        que = [(x, y)]
-        while que:
-            x, y = que.pop(0)
-            for dx, dy in (0, 1), (1, 0), (-1, 0), (0, -1):
+        queue = [(x, y)]
+        while queue:
+            x, y = queue.pop(0)
+            for dx, dy in (1, 0), (0, 1), (-1, 0), (0, -1):
                 next_x, next_y = x + dx, y + dy
-                if 0 <= next_x < self.width and 0 < next_y < self.hight and self.is_free((next_x, next_y)) and distance[next_y][next_x] == INF:
-                    distance[next_y][next_x] = distance[y][x] + 1
+                if 0 <= next_x < self.width and 0 < next_y < self.hight and \
+                        self.is_free((next_x, next_y)) and distanse[next_y][next_x] == INF:
+                    distanse[next_y][next_x] = distanse[y][x] + 1
                     prev[next_y][next_x] = (x, y)
-                    que.append((next_x, next_y))
+                    queue.append((next_x, next_y))
         x, y = target
-        if distance[y][x] == INF or start == target:
+        if distanse[y][x] == INF or start == target:
             return start
         while prev[y][x] != start:
             x, y = prev[y][x]
@@ -157,6 +170,12 @@ class Game:
     def check_lose(self):
         return self.player.get_position() == self.enemy.get_position()
 
+    def check_lvl(self, level):
+        if level == 2:
+            self.labytint.load_map('field.txt', [0, 2], 2)
+            self.player.set_position((7, 7))
+            self.enemy.set_position((7, 1))
+
 
 def show_message(screen, message):
     font = pygame.font.Font(None, 50)
@@ -174,6 +193,7 @@ screen = pygame.display.set_mode(WINDOW_SIZE)
 clock = pygame.time.Clock()
 running = True
 game_over = False
+level = 1
 labyrint = Labyrint('field1.txt', [0, 2], 2, 'grass.png', 'box.png')
 player = Player((7, 7))
 enemy = Enemies((7, 1))
@@ -193,7 +213,10 @@ while running:
         if game.check_lose():
             game_over = True
             show_message(screen, 'You have lost!')
-        if game.check_win():
+        if game.check_win() and level < 2:
+            level += 1
+            game.check_lvl(level)
+        if game.check_win() and level == 2:
             game_over = True
             show_message(screen, 'You won!')
         pygame.display.flip()
