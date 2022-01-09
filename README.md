@@ -1,0 +1,2 @@
+# Labyrinth
+PyGame project
