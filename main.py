@@ -2,6 +2,7 @@ import pygame
 import sys
 import os
 from collections import deque
+from random import randint
 
 WINDOW_SIZE = WINDOW_WIDTH, WINDOW_HEIGHT = 480, 480
 FPS = 25
@@ -97,22 +98,47 @@ class Labyrinth:
         return x, y
 
 
-class Player:
+class Player(pygame.sprite.Sprite):
     def __init__(self, position):
+        super().__init__(all_sprites)
         self.x, self.y = position
         self.image = load_image('mar.png')
         self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
+        #all_sprites.remove(self)
 
     def get_position(self):
         return self.x, self.y
 
     def set_position(self, position):
         self.x, self.y = position
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
 
     def render(self, screen):
         screen.blit(self.image, (self.x * labyrinth.tile_size_x, self.y * labyrinth.tile_size_y))
         # center = self.x * TILE_SIZE + TILE_SIZE // 2, self.y * TILE_SIZE + TILE_SIZE // 2
         # pygame.draw.circle(screen, (255, 255, 255), center, TILE_SIZE // 2)
+
+
+class Key(pygame.sprite.Sprite):
+    def __init__(self, position):
+        super().__init__(all_sprites)
+        self.add(keys)
+        self.image = load_image('key.jpg', colorkey=-1)
+        #self.image = pygame.Surface((labyrinth.tile_size_x, labyrinth.tile_size_y),
+        #                            pygame.SRCALPHA, 32)
+        #image = load_image('key.jpg')
+        self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        #pygame.draw.rect(self.image, pygame.Color("blue"), (0, 0, 20, 20), 0)
+        #self.image.blit(image, (0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
+        self.mask = pygame.mask.from_surface(self.image)
 
 
 class Enemies:
@@ -160,6 +186,7 @@ class Game:
         if self.labyrinth.is_free((next_x, next_y)):
             self.player.set_position((next_x, next_y))
             self.flag_enemy = True
+        pygame.sprite.spritecollide(self.player, keys, True)
 
     def move_enemy(self):
         if self.flag_enemy:
@@ -177,6 +204,9 @@ class Game:
             self.labyrinth.load_map('field.txt', [0, 2], 2)
             self.player.set_position((7, 7))
             self.enemy.set_position((7, 1))
+            for i in range(number_of_level):
+                key = Key((randint(1, 480 // self.labyrinth.tile_size_x - 1),
+                           randint(1, 480 // self.labyrinth.tile_size_y - 1)))
 
 
 def show_message(screen, message):
@@ -225,10 +255,16 @@ start_screen()
 running = True
 game_over = False
 number_of_level = 1
+all_sprites = pygame.sprite.Group()
+keys = pygame.sprite.Group()
 labyrinth = Labyrinth('field1.txt', [0, 2], 2, 'grass.png', 'box.png')
+for i in range(number_of_level):
+    key = Key((randint(1, 480 // labyrinth.tile_size_x - 1),
+               randint(1, 480 // labyrinth.tile_size_y - 1)))
 player = Player((7, 7))
 enemy = Enemies((7, 1))
 game = Game(labyrinth, player, enemy)
+all_sprites.draw(screen)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -241,6 +277,7 @@ while running:
         labyrinth.render(screen)
         player.render(screen)
         game.render(screen)
+        all_sprites.draw(screen)
         if game.check_lose():
             game_over = True
             show_message(screen, 'You have lost!')
