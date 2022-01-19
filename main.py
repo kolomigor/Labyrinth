@@ -1,7 +1,11 @@
 import pygame
 import sys
 import os
+import sqlite3
 from collections import deque
+from random import randint
+from PyQt5.QtWidgets import *
+from PyQt5 import uic
 
 WINDOW_SIZE = WINDOW_WIDTH, WINDOW_HEIGHT = 480, 480
 FPS = 25
@@ -9,6 +13,16 @@ MAPS_DIR = 'maps'
 TILE_SIZE = 32
 ENEMY_EVENT_TYPE = 30
 INF = 1000
+keys_collected = 0
+score = 0
+SIZE = 480
+fontSize = 50
+finalLevel = 3
+
+
+def terminate():
+    pygame.quit()
+    sys.exit()
 
 
 def load_image(name, colorkey=None):
@@ -97,22 +111,64 @@ class Labyrinth:
         return x, y
 
 
-class Player:
+class Player(pygame.sprite.Sprite):
     def __init__(self, position):
+        super().__init__(all_sprites)
         self.x, self.y = position
         self.image = load_image('mar.png')
         self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
+        #all_sprites.remove(self)
 
     def get_position(self):
         return self.x, self.y
 
     def set_position(self, position):
         self.x, self.y = position
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
 
     def render(self, screen):
         screen.blit(self.image, (self.x * labyrinth.tile_size_x, self.y * labyrinth.tile_size_y))
         # center = self.x * TILE_SIZE + TILE_SIZE // 2, self.y * TILE_SIZE + TILE_SIZE // 2
         # pygame.draw.circle(screen, (255, 255, 255), center, TILE_SIZE // 2)
+
+
+class Key(pygame.sprite.Sprite):
+    def __init__(self, position):
+        super().__init__(all_sprites)
+        self.add(keys)
+        self.image = load_image('key.jpg', colorkey=-1)
+        #self.image = pygame.Surface((labyrinth.tile_size_x, labyrinth.tile_size_y),
+        #                            pygame.SRCALPHA, 32)
+        #image = load_image('key.jpg')
+        self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        #pygame.draw.rect(self.image, pygame.Color("blue"), (0, 0, 20, 20), 0)
+        #self.image.blit(image, (0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
+        self.mask = pygame.mask.from_surface(self.image)
+
+
+class Star(pygame.sprite.Sprite):
+    def __init__(self, position):
+        super().__init__(all_sprites)
+        self.add(stars)
+        self.image = load_image('star.jpg', colorkey=-1)
+        # self.image = pygame.Surface((labyrinth.tile_size_x, labyrinth.tile_size_y),
+        #                            pygame.SRCALPHA, 32)
+        # image = load_image('key.jpg')
+        self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        # pygame.draw.rect(self.image, pygame.Color("blue"), (0, 0, 20, 20), 0)
+        # self.image.blit(image, (0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.x = position[0] * labyrinth.tile_size_x
+        self.rect.y = position[1] * labyrinth.tile_size_y
+        self.mask = pygame.mask.from_surface(self.image)
 
 
 class Enemies:
@@ -148,6 +204,8 @@ class Game:
         self.enemy.render(screen)
 
     def update_player(self):
+        global keys_collected
+        global score
         next_x, next_y = self.player.get_position()
         if pygame.key.get_pressed()[pygame.K_LEFT]:
             next_x -= 1
@@ -160,6 +218,10 @@ class Game:
         if self.labyrinth.is_free((next_x, next_y)):
             self.player.set_position((next_x, next_y))
             self.flag_enemy = True
+        if pygame.sprite.spritecollide(self.player, keys, True):
+            keys_collected += 1
+        if pygame.sprite.spritecollide(self.player, stars, True):
+            score += 20
 
     def move_enemy(self):
         if self.flag_enemy:
@@ -167,20 +229,36 @@ class Game:
             self.enemy.set_position(next_position)
 
     def check_win(self):
-        return self.labyrinth.get_tile_id(self.player.get_position()) == self.labyrinth.finish_tile
+        return self.labyrinth.get_tile_id(self.player.get_position()) == self.labyrinth.finish_tile and keys_collected == lvl
 
     def check_lose(self):
         return self.player.get_position() == self.enemy.get_position()
 
     def check_lvl(self, level):
+        global keys_collected
         if level == 2:
-            self.labyrinth.load_map('field.txt', [0, 2], 2)
+            self.labyrinth.load_map(f'field{lvl}.txt', [0, 2], 2)
             self.player.set_position((7, 7))
             self.enemy.set_position((7, 1))
+            keys_collected = 0
+            for i in range(lvl):
+                x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+                y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+                while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
+                    x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+                    y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+                key = Key((x, y))
+            for i in range(3):
+                x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+                y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+                while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
+                    x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+                    y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+                star = Star((x, y))
 
 
 def show_message(screen, message):
-    font = pygame.font.Font(None, 50)
+    font = pygame.font.Font(None, fontSize)
     text = font.render(message, True, (50, 70, 0))
     text_x = WINDOW_WIDTH // 2 - text.get_width() // 2
     text_y = WINDOW_HEIGHT // 2 - text.get_height() // 2
@@ -196,11 +274,68 @@ clock = pygame.time.Clock()
 pygame.display.set_caption('Лабиринт')
 
 
+class RegistrationApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        uic.loadUi('data/reg.ui', self)
+        self.setWindowTitle('Регистрация игрока')
+        self.con = sqlite3.connect('data/base.db')
+        self.cur = self.con.cursor()
+        self.pushButton.clicked.connect(self.run)
+
+    def run(self):
+        name = self.lineEdit.text()
+        result = self.cur.execute(f"""SELECT * FROM Players WHERE name='{name}'""").fetchall()
+        if len(result) > 0:
+            self.label_2.setText("Такой игрок уже существует")
+        else:
+            self.cur.execute(f"""INSERT INTO Players(name) VALUES('{name}')""")
+            self.con.commit()
+            self.con.close()
+            qApp.quit()
+
+
+def registration_screen():
+    app = QApplication(sys.argv)
+    ex = RegistrationApp()
+    ex.show()
+    app.exec()
+
+
+class EnterApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        uic.loadUi('data/ent.ui', self)
+        self.setWindowTitle('Вход в игру')
+        self.con = sqlite3.connect('data/base.db')
+        self.cur = self.con.cursor()
+        self.pushButton.clicked.connect(self.run)
+
+    def run(self):
+        global playerName
+        name = self.lineEdit.text()
+        result = self.cur.execute(f"""SELECT * FROM Players WHERE name='{name}'""").fetchall()
+        if len(result) > 0:
+            playerName = name
+            qApp.quit()
+        else:
+            self.label_2.setText("Игрок не найден")
+
+
+def enter_screen():
+    app = QApplication(sys.argv)
+    ex = EnterApp()
+    ex.show()
+    app.exec()
+
+
 def start_screen():
-    intro_text = ["Лабиринт"]
+    intro_text = ["Лабиринт", "", "", "", "", "", "", "", "", "", "", "", "",
+                  "Нажмите 1, чтобы зарегистрироватся",
+                  "Нажмите 2, чтобы войти"]
     fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
     screen.blit(fon, (0, 0))
-    font = pygame.font.Font(None, 50)
+    font = pygame.font.Font(None, 30)
     text_coord = 10
     for line in intro_text:
         string_rendered = font.render(line, True, pygame.Color('red'))
@@ -215,20 +350,51 @@ def start_screen():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
-            elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                return
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    registration_screen()
+                elif event.key == pygame.K_2:
+                    enter_screen()
+                    if playerName != '':
+                        return
         pygame.display.flip()
         clock.tick(FPS)
 
 
 start_screen()
+con = sqlite3.connect('data/base.db')
+cur = con.cursor()
+lst1 = cur.execute(f"""SELECT * FROM Players WHERE name='{playerName}'""").fetchall()
+elem1 = lst1[0]
+idPlayer = elem1[0]
+score1 = elem1[3]
 running = True
 game_over = False
-number_of_level = 1
-labyrinth = Labyrinth('field1.txt', [0, 2], 2, 'grass.png', 'box.png')
+lvl = elem1[2]
+all_sprites = pygame.sprite.Group()
+keys = pygame.sprite.Group()
+stars = pygame.sprite.Group()
+labyrinth = Labyrinth(f'field{lvl}.txt', [0, 2], 2, 'grass.png', 'box.png')
 player = Player((7, 7))
 enemy = Enemies((7, 1))
+cntStars = [3, 3]
+cntKeys = [1, 2]
+for i in range(cntKeys[lvl - 1]):
+    x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+    y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+    while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
+        x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+        y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+    key = Key((x, y))
+for i in range(cntStars[lvl - 1]):
+    x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+    y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+    while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
+        x = randint(1, SIZE // labyrinth.tile_size_x - 1)
+        y = randint(1, SIZE // labyrinth.tile_size_y - 1)
+    star = Star((x, y))
 game = Game(labyrinth, player, enemy)
+all_sprites.draw(screen)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -241,22 +407,18 @@ while running:
         labyrinth.render(screen)
         player.render(screen)
         game.render(screen)
+        all_sprites.draw(screen)
         if game.check_lose():
             game_over = True
             show_message(screen, 'You have lost!')
-        if game.check_win() and number_of_level < 2:
-            number_of_level += 1
-            game.check_lvl(number_of_level)
-        if game.check_win() and number_of_level == 2:
+        if game.check_win() and lvl < finalLevel:
+            lvl += 1
+            cur.execute(f"""UPDATE Players SET level={lvl} WHERE id={idPlayer}""")
+            con.commit()
+            game.check_lvl(lvl)
+        if game.check_win() and lvl == finalLevel:
             game_over = True
             show_message(screen, 'You won!')
         pygame.display.flip()
         clock.tick(FPS)
 pygame.quit()
-
-
-def terminate():
-    pygame.quit()
-    sys.exit()
-
-
