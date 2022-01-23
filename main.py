@@ -1,6 +1,7 @@
 import pygame
 import sys
 import os
+import random
 from collections import deque
 from random import randint
 
@@ -9,10 +10,12 @@ FPS = 25
 MAPS_DIR = 'maps'
 TILE_SIZE = 32
 ENEMY_EVENT_TYPE = 30
-INF = 1000
+INF = 700
 keys_collected = 0
 score = 0
-
+screen_rect = (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
+pygame.init()
+screen = pygame.display.set_mode(WINDOW_SIZE)
 
 
 def load_image(name, colorkey=None):
@@ -30,6 +33,46 @@ def load_image(name, colorkey=None):
     else:
         image = image.convert_alpha()
     return image
+
+
+class Particle(pygame.sprite.Sprite):
+    # сгенерируем частицы разного размера
+    fire = [load_image("star.png", colorkey=-1)]
+    for scale in (5, 10, 20):
+        fire.append(pygame.transform.scale(fire[0], (scale, scale)))
+
+    def __init__(self, pos, dx, dy):
+        super().__init__(all_sprites)
+        self.image = random.choice(self.fire)
+        self.rect = self.image.get_rect()
+
+        # у каждой частицы своя скорость — это вектор
+        self.velocity = [dx, dy]
+        # и свои координаты
+        self.rect.x, self.rect.y = pos
+
+        # гравитация будет одинаковой (значение константы)
+        self.gravity = 5
+
+    def update(self):
+        # применяем гравитационный эффект:
+        # движение с ускорением под действием гравитации
+        self.velocity[1] += self.gravity
+        # перемещаем частицу
+        self.rect.x += self.velocity[0]
+        self.rect.y += self.velocity[1]
+        # убиваем, если частица ушла за экран
+        if not self.rect.colliderect(screen_rect):
+            self.kill()
+
+
+def create_particles(position):
+    # количество создаваемых частиц
+    particle_count = 20
+    # возможные скорости
+    numbers = range(-5, 6)
+    for _ in range(particle_count):
+        Particle(position, random.choice(numbers), random.choice(numbers))
 
 
 class Labyrinth:
@@ -61,6 +104,8 @@ class Labyrinth:
         self.tile_size_y = WINDOW_HEIGHT // self.height
         self.free_tiles = free_tiles
         self.finish_tile = finish_tile
+        self.floor = pygame.transform.scale(self.floor, (self.tile_size_x, self.tile_size_y))
+        self.wall = pygame.transform.scale(self.wall, (self.tile_size_x, self.tile_size_y))
 
     def render(self, screen):
         colors = {0: self.floor, 1: self.wall, 2: self.floor}
@@ -112,6 +157,10 @@ class Player(pygame.sprite.Sprite):
         self.rect.x = position[0] * labyrinth.tile_size_x
         self.rect.y = position[1] * labyrinth.tile_size_y
         #all_sprites.remove(self)
+
+    def resize(self):
+        self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        self.mask = pygame.mask.from_surface(self.image)
 
     def get_position(self):
         return self.x, self.y
@@ -172,6 +221,14 @@ class Enemies:
     def get_position(self):
         return self.x, self.y
 
+    def resize(self):
+        self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+
+    def set_image(self):
+        self.image = load_image('boom.png')
+        self.image = pygame.transform.scale(self.image, (labyrinth.tile_size_x, labyrinth.tile_size_y))
+        pygame.time.set_timer(ENEMY_EVENT_TYPE, self.delay)
+
     def set_position(self, position):
         self.x, self.y = position
 
@@ -211,6 +268,7 @@ class Game:
         if pygame.sprite.spritecollide(self.player, keys, True):
             keys_collected += 1
         if pygame.sprite.spritecollide(self.player, stars, True):
+            create_particles((self.player.get_position()[0] * self.labyrinth.tile_size_x, self.player.get_position()[1] * self.labyrinth.tile_size_y))
             score += 20
 
     def move_enemy(self):
@@ -226,25 +284,32 @@ class Game:
 
     def check_lvl(self, level):
         global keys_collected
-        if level == 2:
-            self.labyrinth.load_map('field.txt', [0, 2], 2)
-            self.player.set_position((7, 7))
-            self.enemy.set_position((7, 1))
-            keys_collected = 0
-            for i in range(number_of_level):
+        global sp
+        file_name = 'field' + str(level) + '.txt'
+        self.labyrinth.load_map(file_name, [0, 2], 2)
+        self.player.set_position((self.labyrinth.width // 2, self.labyrinth.height // 2))
+        self.enemy.set_position((7, 1))
+        self.enemy.resize()
+        self.player.resize()
+        keys_collected = 0
+        for x in sp:
+            x.kill()
+        sp = []
+        for i in range(number_of_level):
+            x = randint(1, 480 // labyrinth.tile_size_x - 1)
+            y = randint(1, 480 // labyrinth.tile_size_y - 1)
+            while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
                 x = randint(1, 480 // labyrinth.tile_size_x - 1)
                 y = randint(1, 480 // labyrinth.tile_size_y - 1)
-                while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
-                    x = randint(1, 480 // labyrinth.tile_size_x - 1)
-                    y = randint(1, 480 // labyrinth.tile_size_y - 1)
-                key = Key((x, y))
-            for i in range(3):
+            key = Key((x, y))
+        for i in range(3):
+            x = randint(1, 480 // labyrinth.tile_size_x - 1)
+            y = randint(1, 480 // labyrinth.tile_size_y - 1)
+            while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
                 x = randint(1, 480 // labyrinth.tile_size_x - 1)
                 y = randint(1, 480 // labyrinth.tile_size_y - 1)
-                while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
-                    x = randint(1, 480 // labyrinth.tile_size_x - 1)
-                    y = randint(1, 480 // labyrinth.tile_size_y - 1)
-                star = Star((x, y))
+            star = Star((x, y))
+            sp.append(star)
 
 
 def show_message(screen, message):
@@ -258,8 +323,17 @@ def show_message(screen, message):
     screen.blit(text, (text_x, text_y))
 
 
-pygame.init()
-screen = pygame.display.set_mode(WINDOW_SIZE)
+def show_score(screen, score):
+    font = pygame.font.Font(None, 50)
+    text = font.render('Счёт:' + str(score), True, (50, 70, 0))
+    text_x = 0
+    text_y = 0
+    text_w = text.get_width()
+    text_h = text.get_height()
+    #pygame.draw.rect(screen, (200, 150, 50), (text_x - 10, text_y - 10, text_w + 20, text_h + 20))
+    screen.blit(text, (text_x, text_y))
+
+
 clock = pygame.time.Clock()
 pygame.display.set_caption('Лабиринт')
 
@@ -306,6 +380,7 @@ for i in range(number_of_level):
         x = randint(1, 480 // labyrinth.tile_size_x - 1)
         y = randint(1, 480 // labyrinth.tile_size_y - 1)
     key = Key((x, y))
+sp = []
 for i in range(3):
     x = randint(1, 480 // labyrinth.tile_size_x - 1)
     y = randint(1, 480 // labyrinth.tile_size_y - 1)
@@ -313,6 +388,7 @@ for i in range(3):
         x = randint(1, 480 // labyrinth.tile_size_x - 1)
         y = randint(1, 480 // labyrinth.tile_size_y - 1)
     star = Star((x, y))
+    sp.append(star)
 game = Game(labyrinth, player, enemy)
 all_sprites.draw(screen)
 while running:
@@ -327,14 +403,19 @@ while running:
         labyrinth.render(screen)
         player.render(screen)
         game.render(screen)
+        all_sprites.update()
         all_sprites.draw(screen)
+        show_score(screen, score)
         if game.check_lose():
             game_over = True
+            enemy.set_image()
+            enemy.render(screen)
             show_message(screen, 'You have lost!')
-        if game.check_win() and number_of_level < 2:
+        if game.check_win() and number_of_level < 3:
             number_of_level += 1
+            INF -= 100
             game.check_lvl(number_of_level)
-        if game.check_win() and number_of_level == 2:
+        if game.check_win() and number_of_level == 3:
             game_over = True
             show_message(screen, 'You won!')
         pygame.display.flip()
