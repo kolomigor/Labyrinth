@@ -4,6 +4,7 @@ import os
 import random
 from collections import deque
 from random import randint
+import sqlite3
 
 WINDOW_SIZE = WINDOW_WIDTH, WINDOW_HEIGHT = 480, 480
 FPS = 25
@@ -12,10 +13,10 @@ TILE_SIZE = 32
 ENEMY_EVENT_TYPE = 30
 INF = 700
 keys_collected = 0
-score = 0
 screen_rect = (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
 pygame.init()
 screen = pygame.display.set_mode(WINDOW_SIZE)
+playerName = ''
 
 
 def load_image(name, colorkey=None):
@@ -277,7 +278,7 @@ class Game:
             self.enemy.set_position(next_position)
 
     def check_win(self):
-        return self.labyrinth.get_tile_id(self.player.get_position()) == self.labyrinth.finish_tile and keys_collected == number_of_level
+        return self.labyrinth.get_tile_id(self.player.get_position()) == self.labyrinth.finish_tile and keys_collected == lvl
 
     def check_lose(self):
         return self.player.get_position() == self.enemy.get_position()
@@ -295,7 +296,7 @@ class Game:
         for x in sp:
             x.kill()
         sp = []
-        for i in range(number_of_level):
+        for i in range(lvl):
             x = randint(1, 480 // labyrinth.tile_size_x - 1)
             y = randint(1, 480 // labyrinth.tile_size_y - 1)
             while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
@@ -334,46 +335,244 @@ def show_score(screen, score):
     screen.blit(text, (text_x, text_y))
 
 
+pygame.init()
+screen = pygame.display.set_mode(WINDOW_SIZE)
 clock = pygame.time.Clock()
-pygame.display.set_caption('Лабиринт')
+FONT = pygame.font.Font(None, 26)
 
 
-def start_screen():
-    intro_text = ["Лабиринт"]
+class InputBox:
+    def __init__(self, x, y, w, h, text='', color='red'):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.color = pygame.Color(f'{color}')
+        self.text = text
+        self.txt_surface = FONT.render(text, True, self.color)
+        self.active = False
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.active = True
+            else:
+                self.active = False
+        if event.type == pygame.KEYDOWN:
+            if self.active:
+                if event.key == pygame.K_RETURN:
+                    self.text = ''
+                elif event.key == pygame.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                else:
+                    self.text += event.unicode
+                self.txt_surface = FONT.render(self.text, True, self.color)
+
+    def draw(self, screen):
+        screen.blit(self.txt_surface, (self.rect.x+5, self.rect.y+5))
+        pygame.draw.rect(screen, self.color, self.rect, 2)
+
+
+def registration_screen():
+    global playerName, can_main_game
+    box1 = InputBox(20, 300, 200, 32)
+    box = InputBox(20, 420, 200, 32, 'Зарегистрироваться')
     fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
     screen.blit(fon, (0, 0))
-    font = pygame.font.Font(None, 50)
-    text_coord = 10
+    font = pygame.font.Font(None, 30)
+    text_coord = 20
+    string_rendered = font.render("Регистрация", True, pygame.Color('red'))
+    intro_rect = string_rendered.get_rect()
+    intro_rect.top = text_coord
+    intro_rect.x = 10
+    screen.blit(string_rendered, intro_rect)
+    con = sqlite3.connect('data/base.db')
+    cur = con.cursor()
+    while True:
+        pygame.display.set_caption('Регистрация')
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.display.flip()
+                return
+            box.handle_event(event)
+            box1.handle_event(event)
+            if box.active and box1.text != '':
+                box.active = False
+                name = box1.text
+                result = cur.execute(f"""SELECT * FROM Players WHERE name='{name}'""").fetchall()
+                if len(result) == 0:
+                    cur.execute(f"""INSERT INTO Players(name, level, score) VALUES('{name}', 1, 0)""")
+                    con.commit()
+                    con.close()
+                    playerName = name
+                    can_main_game = True
+                    pygame.display.flip()
+                    del box, box1
+                    return
+        box.draw(screen)
+        box1.draw(screen)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def enter_screen():
+    global playerName, can_main_game
+    box1 = InputBox(20, 300, 200, 32)
+    box = InputBox(20, 420, 120, 32, 'Войти')
+    fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+    screen.blit(fon, (0, 0))
+    font = pygame.font.Font(None, 30)
+    text_coord = 20
+    string_rendered = font.render("Вход в игру", True, pygame.Color('red'))
+    intro_rect = string_rendered.get_rect()
+    intro_rect.top = text_coord
+    intro_rect.x = 10
+    screen.blit(string_rendered, intro_rect)
+    con = sqlite3.connect('data/base.db')
+    cur = con.cursor()
+    while True:
+        pygame.display.set_caption('Вход')
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            box1.handle_event(event)
+            box.handle_event(event)
+            if box.active:
+                box.active = False
+                name = box1.text
+                result = cur.execute(f"""SELECT * FROM Players WHERE name='{name}'""").fetchall()
+                if len(result) > 0:
+                    playerName = name
+                    can_main_game = True
+                    return
+        box.draw(screen)
+        box1.draw(screen)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def rating_screen():
+    intro_text = ["Рейтинг"]
+    fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+    screen.blit(fon, (0, 0))
+    font = pygame.font.Font(None, 30)
+    text_coord = 20
     for line in intro_text:
         string_rendered = font.render(line, True, pygame.Color('red'))
         intro_rect = string_rendered.get_rect()
-        text_coord += 10
         intro_rect.top = text_coord
         intro_rect.x = 10
-        text_coord += intro_rect.height
         screen.blit(string_rendered, intro_rect)
-
+    con = sqlite3.connect('data/base.db')
+    cur = con.cursor()
+    cur_h = 260
+    result = cur.execute("""SELECT * FROM Players""").fetchall()
+    result.sort(key=lambda x: -x[3])
+    boxes = []
+    for elem in result:
+        s = ''
+        for i in range(1, len(elem)):
+            s += str(elem[i]) + ' '
+        boxes.append(InputBox(10, cur_h, 200, 32, s))
+        cur_h += 40
     while True:
+        pygame.display.set_caption('Рейтинг')
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            for box in boxes:
+                box.handle_event(event)
+        for box in boxes:
+            box.draw(screen)
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+can_main_game = False
+
+
+def start_screen():
+    input_box1 = InputBox(20, 420, 80, 32, 'Войти')
+    input_box2 = InputBox(270, 420, 180, 32, 'Зарегистрироваться')
+    input_box3 = InputBox(340, 20, 100, 32, 'Рейтинг')
+    boxes = [input_box1, input_box2, input_box3]
+    fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+    screen.blit(fon, (0, 0))
+    font = pygame.font.Font(None, 30)
+    text_coord = 20
+    string_rendered = font.render('Лабиринт', True, pygame.Color('red'))
+    intro_rect = string_rendered.get_rect()
+    intro_rect.top = text_coord
+    intro_rect.x = 10
+    screen.blit(string_rendered, intro_rect)
+    while True:
+        pygame.display.set_caption('Лабиринт')
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
-            elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                return
+            for box in boxes:
+                box.handle_event(event)
+            if input_box1.active and event.type == pygame.MOUSEBUTTONDOWN:
+                pygame.display.flip()
+                enter_screen()
+                pygame.display.flip()
+                fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+                screen.blit(fon, (0, 0))
+                font = pygame.font.Font(None, 30)
+                string_rendered = font.render('Лабиринт', True, pygame.Color('red'))
+                intro_rect = string_rendered.get_rect()
+                intro_rect.top = text_coord
+                intro_rect.x = 10
+                screen.blit(string_rendered, intro_rect)
+                if can_main_game:
+                    return
+            if input_box2.active and event.type == pygame.MOUSEBUTTONDOWN:
+                pygame.display.flip()
+                registration_screen()
+                pygame.display.flip()
+                fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+                screen.blit(fon, (0, 0))
+                font = pygame.font.Font(None, 30)
+                string_rendered = font.render('Лабиринт', True, pygame.Color('red'))
+                intro_rect = string_rendered.get_rect()
+                intro_rect.top = text_coord
+                intro_rect.x = 10
+                screen.blit(string_rendered, intro_rect)
+                if can_main_game:
+                    return
+            if input_box3.active and event.type == pygame.MOUSEBUTTONDOWN:
+                pygame.display.flip()
+                rating_screen()
+                pygame.display.flip()
+                fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+                screen.blit(fon, (0, 0))
+                font = pygame.font.Font(None, 30)
+                string_rendered = font.render('Лабиринт', True, pygame.Color('red'))
+                intro_rect = string_rendered.get_rect()
+                intro_rect.top = text_coord
+                intro_rect.x = 10
+                screen.blit(string_rendered, intro_rect)
+        for box in boxes:
+            box.draw(screen)
         pygame.display.flip()
         clock.tick(FPS)
 
 
 start_screen()
+con = sqlite3.connect('data/base.db')
+cur = con.cursor()
+pygame.display.set_caption('Лабиринт')
+lst1 = cur.execute(f"""SELECT * FROM Players WHERE name='{playerName}'""").fetchall()
+elem1 = lst1[0]
+idPlayer = elem1[0]
+score = elem1[3]
 running = True
 game_over = False
-number_of_level = 1
+lvl = elem1[2]
 all_sprites = pygame.sprite.Group()
 keys = pygame.sprite.Group()
 stars = pygame.sprite.Group()
-labyrinth = Labyrinth('field1.txt', [0, 2], 2, 'grass.png', 'box.png')
+labyrinth = Labyrinth(f'field{lvl}.txt', [0, 2], 2, 'grass.png', 'box.png')
 player = Player((7, 7))
 enemy = Enemies((7, 1))
-for i in range(number_of_level):
+for i in range(lvl):
     x = randint(1, 480 // labyrinth.tile_size_x - 1)
     y = randint(1, 480 // labyrinth.tile_size_y - 1)
     while not labyrinth.is_free((x, y)) or enemy.get_position() == (x, y):
@@ -411,11 +610,14 @@ while running:
             enemy.set_image()
             enemy.render(screen)
             show_message(screen, 'You have lost!')
-        if game.check_win() and number_of_level < 3:
-            number_of_level += 1
+        if game.check_win() and lvl < 3:
+            lvl += 1
+            cur.execute(f"""UPDATE Players SET level={lvl} WHERE id={idPlayer}""")
+            cur.execute(f"""UPDATE Players SET score={score} WHERE id={idPlayer}""")
+            con.commit()
             INF -= 100
-            game.check_lvl(number_of_level)
-        if game.check_win() and number_of_level == 3:
+            game.check_lvl(lvl)
+        if game.check_win() and lvl == 3:
             game_over = True
             show_message(screen, 'You won!')
         pygame.display.flip()
@@ -426,5 +628,3 @@ pygame.quit()
 def terminate():
     pygame.quit()
     sys.exit()
-
-
