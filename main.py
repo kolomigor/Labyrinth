@@ -294,7 +294,7 @@ class Game:
     def check_lvl(self, level):
         global keys_collected
         global sp
-        file_name = 'field' + str(level) + '.txt'
+        file_name = 'field' + str(min(final_level, level)) + '.txt'
         self.labyrinth.load_map(file_name, [0, 2], 2)
         self.player.set_position((self.labyrinth.width // 2, self.labyrinth.height // 2))
         self.enemy.set_position((7, 1))
@@ -378,48 +378,6 @@ class InputBox:
         pygame.draw.rect(screen, self.color, self.rect, 2)
 
 
-def registration_screen():
-    global playerName, can_main_game
-    box1 = InputBox(20, 300, 200, 32)
-    box = InputBox(20, 420, 200, 32, 'Зарегистрироваться')
-    fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
-    screen.blit(fon, (0, 0))
-    font = pygame.font.Font(None, 30)
-    text_coord = 20
-    string_rendered = font.render("Регистрация", True, pygame.Color('red'))
-    intro_rect = string_rendered.get_rect()
-    intro_rect.top = text_coord
-    intro_rect.x = 10
-    screen.blit(string_rendered, intro_rect)
-    con = sqlite3.connect('data/base.db')
-    cur = con.cursor()
-    while True:
-        pygame.display.set_caption('Регистрация')
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.display.flip()
-                return
-            box.handle_event(event)
-            box1.handle_event(event)
-            if box.active and box1.text != '':
-                box.active = False
-                name = box1.text
-                result = cur.execute(f"""SELECT * FROM Players WHERE name='{name}'""").fetchall()
-                if len(result) == 0:
-                    cur.execute(f"""INSERT INTO Players(name, level, score) VALUES('{name}', 1, 0)""")
-                    con.commit()
-                    con.close()
-                    playerName = name
-                    can_main_game = True
-                    pygame.display.flip()
-                    del box, box1
-                    return
-        box.draw(screen)
-        box1.draw(screen)
-        pygame.display.flip()
-        clock.tick(FPS)
-
-
 def enter_screen():
     global playerName, can_main_game
     box1 = InputBox(20, 300, 200, 32)
@@ -450,6 +408,14 @@ def enter_screen():
                     playerName = name
                     can_main_game = True
                     return
+                else:
+                    cur.execute(f"""INSERT INTO Players(name, level, score) VALUES('{name}', 1, 0)""")
+                    con.commit()
+                    con.close()
+                    playerName = name
+                    can_main_game = True
+                    pygame.display.flip()
+                    return
         box.draw(screen)
         box1.draw(screen)
         pygame.display.flip()
@@ -458,7 +424,7 @@ def enter_screen():
 
 def rating_screen():
     intro_text = ["Рейтинг"]
-    fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
+    fon = pygame.transform.scale(load_image('rating_fon.jpg'), WINDOW_SIZE)
     screen.blit(fon, (0, 0))
     font = pygame.font.Font(None, 30)
     text_coord = 20
@@ -470,16 +436,17 @@ def rating_screen():
         screen.blit(string_rendered, intro_rect)
     con = sqlite3.connect('data/base.db')
     cur = con.cursor()
-    cur_h = 260
+    cur_h = 50
     result = cur.execute("""SELECT * FROM Players""").fetchall()
-    result.sort(key=lambda x: -x[3])
-    boxes = []
+    result.sort(key=lambda x: -x[2] * 1000 - x[3])
+    boxes = [InputBox(10, cur_h, 110, 32, "Имя"), (InputBox(120, cur_h, 80, 32, "Уровень")),
+             InputBox(200, cur_h, 60, 32, "Счет")]
+    cur_h += 32
     for elem in result:
-        s = ''
-        for i in range(1, len(elem)):
-            s += str(elem[i]) + ' '
-        boxes.append(InputBox(10, cur_h, 200, 32, s))
-        cur_h += 40
+        boxes.append(InputBox(10, cur_h, 110, 32, str(elem[1])))
+        boxes.append(InputBox(120, cur_h, 80, 32, str(elem[2])))
+        boxes.append(InputBox(200, cur_h, 60, 32, str(elem[3])))
+        cur_h += 32
     while True:
         pygame.display.set_caption('Рейтинг')
         for event in pygame.event.get():
@@ -501,9 +468,8 @@ def start_screen():
     pygame.mixer.music.play()
     pygame.mixer.music.set_volume(0.3)
     input_box1 = InputBox(20, 420, 80, 32, 'Войти')
-    input_box2 = InputBox(270, 420, 180, 32, 'Зарегистрироваться')
-    input_box3 = InputBox(340, 20, 100, 32, 'Рейтинг')
-    boxes = [input_box1, input_box2, input_box3]
+    input_box2 = InputBox(340, 20, 100, 32, 'Рейтинг')
+    boxes = [input_box1, input_box2]
     fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
     screen.blit(fon, (0, 0))
     font = pygame.font.Font(None, 30)
@@ -536,20 +502,6 @@ def start_screen():
                     return
             if input_box2.active and event.type == pygame.MOUSEBUTTONDOWN:
                 pygame.display.flip()
-                registration_screen()
-                pygame.display.flip()
-                fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
-                screen.blit(fon, (0, 0))
-                font = pygame.font.Font(None, 30)
-                string_rendered = font.render('Лабиринт', True, pygame.Color('red'))
-                intro_rect = string_rendered.get_rect()
-                intro_rect.top = text_coord
-                intro_rect.x = 10
-                screen.blit(string_rendered, intro_rect)
-                if can_main_game:
-                    return
-            if input_box3.active and event.type == pygame.MOUSEBUTTONDOWN:
-                pygame.display.flip()
                 rating_screen()
                 pygame.display.flip()
                 fon = pygame.transform.scale(load_image('fon.jpg'), WINDOW_SIZE)
@@ -581,7 +533,8 @@ lvl = elem1[2]
 all_sprites = pygame.sprite.Group()
 keys = pygame.sprite.Group()
 stars = pygame.sprite.Group()
-labyrinth = Labyrinth(f'field{lvl}.txt', [0, 2], 2, 'grass.png', 'box.png')
+final_level = 4
+labyrinth = Labyrinth(f'field{min(final_level, lvl)}.txt', [0, 2], 2, 'grass.png', 'box.png')
 player = Player((7, 7))
 enemy = Enemies((7, 1))
 for i in range(lvl):
@@ -606,6 +559,7 @@ first_lose = True
 sound = pygame.mixer.Sound("data/game_music.mp3")
 sound.set_volume(0.3)
 sound.play()
+already_won = False
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -630,18 +584,17 @@ while running:
             enemy.set_image()
             enemy.render(screen)
             show_message(screen, 'You have lost!')
-        if game.check_win() and lvl < 3:
-            lvl += 1
-            cur.execute(f"""UPDATE Players SET level={lvl} WHERE id={idPlayer}""")
+        if game.check_win():
+            cur.execute(f"""UPDATE Players SET level={lvl + 1} WHERE id={idPlayer}""")
             cur.execute(f"""UPDATE Players SET score={score} WHERE id={idPlayer}""")
             con.commit()
+        if game.check_win() and lvl < final_level:
+            lvl += 1
             INF -= 100
             game.check_lvl(lvl)
-        if game.check_win() and lvl == 3:
+        if game.check_win() and lvl >= final_level:
             game_over = True
             show_message(screen, 'You won!')
         pygame.display.flip()
         clock.tick(FPS)
 pygame.quit()
-
-
