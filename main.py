@@ -5,6 +5,8 @@ import random
 from collections import deque
 from random import randint
 import sqlite3
+import math
+
 
 WINDOW_SIZE = WINDOW_WIDTH, WINDOW_HEIGHT = 480, 480
 FPS = 25
